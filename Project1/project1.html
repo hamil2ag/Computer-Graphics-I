@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Project 1</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #778899;
+      color: gray;
+      font-family: Arial, sans-serif;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #info {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      padding: 12px 14px;
+      background: rgba(0, 0, 0, 1);
+      border-radius: 8px;
+      font-size: 10px;
+      line-height: 1.4;
+    }
+
+    #info2 {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      padding: 12px 14px;
+      background: rgba(0, 0, 0, 1);
+      border-radius: 8px;
+      font-size: 10px;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <div id="info">
+    <b>Project 1: Pinhole camera, rasterized display</b><br>
+  </div>
+
+  <div id="info2">
+    <b>Press "1" to reset, "2" for level 2, and "3" for level 3</b><br>
+  </div>
+
+<script>
+
+  //we add shapes (like lines) to this canvas
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+
+  let prevTime = 0;
+
+  let vertices = []
+
+  // an array of the indics for the two vertices in each edge
+  let edges = [];
+
+  let faces = [];
+
+  let mode2 = 0;
+
+  let mode3 = 0;
+
+  let camera = {x: 20, y: 1.5, z: -0.5};
+
+  let numPoolVertices = 0;
+  let numPoolEdges = 0;
+  let numPoolFaces = 0;
+
+  let numBoatVertices = 0;
+  let numBoatEdges = 0;
+
+  let numSunEdges = 0;
+
+  const pixelSize = 4;
+  let rows = 0;
+  let cols = 0;
+  let pixelGrid = [];
+
+  //This was originally meant to be a pool, but upon finding out my program could run
+  //much faster with the console logs disabled, I made the pool into an ocean.
+  function pool(vertices, edges, faces){
+
+    vertices.length = 0;
+    edges.length = 0;
+    faces.length = 0;
+
+    let rand = 0;
+    let rand2 = 0;
+
+    //Creates a 40x40 grid for the water
+    for(let i = 0; i < 40; i++){
+      for(let j = 0; j < 40; j++){
+        if (j == 0){
+          if (i == 0){
+            rand2 = rand;
+            rand = Math.random()/2;
+          }
+          else{
+            rand = rand2;
+            rand2 = Math.random()/2;
+          }
+        }
+        //The random functionality is what makes the water wavey
+        vertices.push({ x: i,   y:  0.1 + rand,  z: j});
+        vertices.push({ x: i,   y:  0,  z: j});
+        vertices.push({ x: 1 + i, y:  0.1 + rand2,  z: j});
+        vertices.push({ x: 1 + i, y:  0,  z: j});
+        vertices.push({ x: i,   y:  0.1 + rand,  z: 1 + j});
+        vertices.push({ x: i,   y:  0,  z: 1 + j});
+        vertices.push({ x: 1 + i, y:  0.1 + rand2,  z: 1 + j});
+        vertices.push({ x: 1 + i, y:  0,  z: 1 + j});
+
+        //Meant to mean "multiplier and offset" - basically helps to map the edges to the correct vertices
+        const mult_and_off = (i * 40 + j) * 8;
+        //I disabled some of these edges from rendering because I didn't like them
+        //They can be reenabled and the code should still run fine
+        //edges.push([mult_and_off + 0, mult_and_off + 1]);
+        //edges.push([mult_and_off + 2, mult_and_off + 3]);
+        //edges.push([mult_and_off + 4, mult_and_off + 5]);
+        //edges.push([mult_and_off + 6, mult_and_off + 7]);
+        edges.push([mult_and_off + 0, mult_and_off + 2]);
+        //edges.push([mult_and_off + 1, mult_and_off + 3]);
+        edges.push([mult_and_off + 4, mult_and_off + 6]);
+        //edges.push([mult_and_off + 5, mult_and_off + 7]);
+        edges.push([mult_and_off + 0, mult_and_off + 4]);
+        edges.push([mult_and_off + 2, mult_and_off + 6]);
+        //edges.push([mult_and_off + 1, mult_and_off + 5]);
+        //edges.push([mult_and_off + 3, mult_and_off + 7]); 
+
+        faces.push([mult_and_off + 0, mult_and_off + 2, mult_and_off + 6]);
+        faces.push([mult_and_off + 0, mult_and_off + 6, mult_and_off + 4]);
+
+      }
+    }
+    
+    //Jankiness to keep track of what vertices are "pool" vertices
+    //console.log("vertices, edges, faces");
+    numPoolVertices = vertices.length;
+    //console.log(vertices.length);
+    numPoolEdges = edges.length;
+    //console.log(edges.length);
+    numPoolFaces = faces.length;
+    //console.log(faces.length);
+  }
+
+  function boat(vertices, edges, faces){
+    //Moves the boat up and down
+    rand1 = Math.random()/8;
+
+    //Moves the boat side to side
+    rand2 = (Math.random()-0.5)/2;
+
+    numBoatVertices = 26;
+    numBoatEdges = 13;
+
+    //Right side of boat
+    vertices.push({ x: camera.x+2, y:  0.67 + rand1,  z: 10 - rand2});
+    vertices.push({ x: camera.x+1, y:  0 + rand1,  z: 10 - rand2});
+    edges.push([numPoolVertices + 0, numPoolVertices + 1]);
+
+    vertices.push({ x: camera.x+1, y:  0.67 + rand1,  z: 9 - rand2});
+    vertices.push({ x: camera.x+1, y:  0 + rand1,  z: 10 - rand2});
+    edges.push([numPoolVertices + 2, numPoolVertices + 3]);
+
+    vertices.push({ x: camera.x+1, y:  0.67 + rand1,  z: 11 - rand2});
+    vertices.push({ x: camera.x+1, y:  0 + rand1,  z: 10 - rand2});
+    edges.push([numPoolVertices + 4, numPoolVertices + 5]);
+
+    vertices.push({ x: camera.x+2, y:  0.67 + rand1,  z: 10 - rand2});
+    vertices.push({ x: camera.x+1, y:  0.67 + rand1,  z: 9 - rand2});
+    edges.push([numPoolVertices + 6, numPoolVertices + 7]);
+
+    vertices.push({ x: camera.x+2, y:  0.67 + rand1,  z: 10 - rand2});
+    vertices.push({ x: camera.x+1, y:  0.67 + rand1,  z: 11 - rand2});
+    edges.push([numPoolVertices + 8, numPoolVertices + 9]);
+
+    faces.push([numPoolVertices + 0, numPoolVertices + 1, numPoolVertices + 2]);
+    faces.push([numPoolVertices + 4, numPoolVertices + 5, numPoolVertices + 6]);
+    
+
+    //Left side of boat
+    vertices.push({ x: camera.x-2, y:  0.67 + rand1,  z: 10 + rand2});
+    vertices.push({ x: camera.x-1, y:  0 + rand1,  z: 10 + rand2});
+    edges.push([numPoolVertices + 10, numPoolVertices + 11]);
+
+    vertices.push({ x: camera.x-1, y:  0.67 + rand1,  z: 9 + rand2});
+    vertices.push({ x: camera.x-1, y:  0 + rand1,  z: 10 + rand2});
+    edges.push([numPoolVertices + 12, numPoolVertices + 13]);
+
+    vertices.push({ x: camera.x-1, y:  0.67 + rand1,  z: 11 + rand2});
+    vertices.push({ x: camera.x-1, y:  0 + rand1,  z: 10 + rand2});
+    edges.push([numPoolVertices + 14, numPoolVertices + 15]);
+
+    vertices.push({ x: camera.x-2, y:  0.67 + rand1,  z: 10 + rand2});
+    vertices.push({ x: camera.x-1, y:  0.67 + rand1,  z: 9 + rand2});
+    edges.push([numPoolVertices + 16, numPoolVertices + 17]);
+
+    vertices.push({ x: camera.x-2, y:  0.67 + rand1,  z: 10 + rand2});
+    vertices.push({ x: camera.x-1, y:  0.67 + rand1,  z: 11 + rand2});
+    edges.push([numPoolVertices + 18, numPoolVertices + 19]);
+
+    faces.push([numPoolVertices + 10, numPoolVertices + 11, numPoolVertices + 12]);
+    faces.push([numPoolVertices + 14, numPoolVertices + 15, numPoolVertices + 16]);
+
+
+    //Middle part of boat
+    vertices.push({ x: camera.x-1, y:  0.67 + rand1,  z: 11 + rand2});
+    vertices.push({ x: camera.x+1, y:  0.67 + rand1,  z: 11 - rand2});
+    edges.push([numPoolVertices + 20, numPoolVertices + 21]);
+
+    vertices.push({ x: camera.x-1, y:  0.67 + rand1,  z: 9 + rand2});
+    vertices.push({ x: camera.x+1, y:  0.67 + rand1,  z: 9 - rand2});
+    edges.push([numPoolVertices + 22, numPoolVertices + 23]);
+
+    vertices.push({ x: camera.x-1, y:  0 + rand1,  z: 10 + rand2});
+    vertices.push({ x: camera.x+1, y:  0 + rand1,  z: 10 - rand2});
+    edges.push([numPoolVertices + 24, numPoolVertices + 25]);
+
+    faces.push([numPoolVertices + 20, numPoolVertices + 21, numPoolVertices + 25]);
+    faces.push([numPoolVertices + 20, numPoolVertices + 25, numPoolVertices + 24]);
+    faces.push([numPoolVertices + 22, numPoolVertices + 23, numPoolVertices + 25]);
+    faces.push([numPoolVertices + 22, numPoolVertices + 25, numPoolVertices + 24]);
+  }
+
+  function sun(vertices, edges, faces){
+    x_offset = -8;
+    y_offset = 10;
+    z_offset = 32;
+
+    numSunFaces = 3;
+    numSunEdges = 7;
+
+    vertices.push({ x: camera.x + x_offset - 2, y:  camera.y + y_offset + 0.7,  z: camera.z + z_offset});
+    vertices.push({ x: camera.x + x_offset - 1.4, y:  camera.y + y_offset - 1.4,  z: camera.z + z_offset});
+    edges.push([numPoolVertices + numBoatVertices + 0, numPoolVertices + numBoatVertices + 1]);
+
+    vertices.push({ x: camera.x + x_offset + 2, y:  camera.y + y_offset - 0.7,  z: camera.z + z_offset});
+    vertices.push({ x: camera.x + x_offset + 1.4, y:  camera.y + y_offset + 1.4,  z: camera.z + z_offset});
+    edges.push([numPoolVertices + numBoatVertices + 2, numPoolVertices + numBoatVertices + 3]);
+
+    vertices.push({ x: camera.x + x_offset - 2, y:  camera.y + y_offset + 0.7,  z: camera.z + z_offset});
+    vertices.push({ x: camera.x + x_offset, y:  camera.y + y_offset + 2,  z: camera.z + z_offset});
+    edges.push([numPoolVertices + numBoatVertices + 4, numPoolVertices + numBoatVertices + 5]);
+
+    vertices.push({ x: camera.x + x_offset + 2, y:  camera.y + y_offset - 0.7,  z: camera.z + z_offset});
+    vertices.push({ x: camera.x + x_offset, y:  camera.y + y_offset - 2,  z: camera.z + z_offset});
+    edges.push([numPoolVertices + numBoatVertices + 6, numPoolVertices + numBoatVertices + 7]);
+
+    vertices.push({ x: camera.x + x_offset - 1.4, y:  camera.y + y_offset - 1.4,  z: camera.z + z_offset});
+    vertices.push({ x: camera.x + x_offset, y:  camera.y + y_offset - 2,  z: camera.z + z_offset});
+    edges.push([numPoolVertices + numBoatVertices + 8, numPoolVertices + numBoatVertices + 9]);
+
+    vertices.push({ x: camera.x + x_offset + 1.4, y:  camera.y + y_offset + 1.4,  z: camera.z + z_offset});
+    vertices.push({ x: camera.x + x_offset, y:  camera.y + y_offset + 2,  z: camera.z + z_offset});
+    edges.push([numPoolVertices + numBoatVertices + 10, numPoolVertices + numBoatVertices + 11]);
+
+    faces.push([numPoolVertices + numBoatVertices + 0, numPoolVertices + numBoatVertices + 1, numPoolVertices + numBoatVertices + 5]);
+    faces.push([numPoolVertices + numBoatVertices + 2, numPoolVertices + numBoatVertices + 3, numPoolVertices + numBoatVertices + 9]);
+    faces.push([numPoolVertices + numBoatVertices + 5, numPoolVertices + numBoatVertices + 1, numPoolVertices + numBoatVertices + 9]);
+    faces.push([numPoolVertices + numBoatVertices + 5, numPoolVertices + numBoatVertices + 9, numPoolVertices + numBoatVertices + 3]);
+  }
+
+  function setPixelColor(u, v, color){
+
+    if (u >= 0 && u < cols && v >= 0 && v < rows) {
+      pixelGrid[u][v] = color;
+    }
+  }
+
+  function draw(){
+
+    //here we set up and clear the canvas, every draw frame
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    //ctx.fillStyle = "#050510";
+    //ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (mode2 == 1){
+      cols = Math.ceil(Math.round(canvas.width / pixelSize));
+      rows = Math.ceil(Math.round(canvas.height / pixelSize));
+      pixelGrid = Array.from({ length: cols }, () => Array(rows).fill("#0F380F"));
+    }
+    
+    pool(vertices, edges, faces);
+    boat(vertices, edges, faces);
+    sun(vertices, edges, faces);
+
+    let projectedVertices = [];
+
+    //- loop through the original vertices (X, Y, Z)
+    //- and determine their position in 3D space relative to camera (x, y, z)
+    //- then project them onto the 2D plane
+    for(let v = 0; v< vertices.length; v++){   //  you could also write it foreach...
+       //console.log("original position:");  //helpful to print things
+       //console.log( vertices[v] );
+
+       //console.log("camera-relative position");
+       let camVert = {}; 
+       //Explanation:
+       //Taking the absolute coordinates of the vertices and making them relative to the camera allows for the shape to change upon moving the camera around
+       camVert.x = camera.x - vertices[v].x; //**** TO DO
+       camVert.y = camera.y - vertices[v].y; //**** TO DO
+       camVert.z = camera.z - vertices[v].z; //**** TO DO
+       //console.log( camVert );
+
+       //console.log("projected position"); 
+       let canvasPos = {};
+       //Explanation:
+       //The following equations calculate the perspective of the prism by mapping a 3D object onto a 2D plane (the final image)
+       canvasPos.u = camVert.x / camVert.z; //**** TO DO  
+       canvasPos.v = camVert.y / camVert.z; //**** TO DO 
+       //console.log( canvasPos );
+
+       //console.log("scale and center"); 
+       canvasPos.u = canvasPos.u * canvas.width + canvas.width/2;
+       canvasPos.v = canvasPos.v * canvas.height + canvas.height/2;
+       //console.log( canvasPos );
+
+       projectedVertices.push(canvasPos);
+       //console.log("---------------"); 
+
+    }
+
+    //loop through the edges
+    //  find the newly computed projected vertices - 2 per edge
+    //  draw the line
+    for(let e = 0; e < edges.length; e++){
+      
+      //first vertex
+      let e1 = edges[e][0]; //idx
+      let u1 = projectedVertices[ e1 ].u; 
+      let v1 = canvas.height - projectedVertices[ e1 ].v;  //TO DO- explain why did I do this?      
+
+      //second vertex
+      let e2 = edges[e][1]; //idx
+      let u2 = projectedVertices[ e2 ].u;
+      let v2 = canvas.height - projectedVertices[ e2 ].v;  //TO DO- explain why did I do this?
+
+      //Explanation:
+      //Subtracting the final vertices location from the canvas height essentially flips the y axis
+      //My guess is that we want the axis to increase going up, not down (which is the default)
+
+      if (mode2 == 0) {
+        if (e < numPoolEdges){
+          drawLine(u1, v1, u2, v2, "#AABBCF");
+        }
+        else if (e >= numPoolEdges && e < numPoolEdges + numBoatEdges){
+          drawLine(u1, v1, u2, v2, "#332A22");
+        }
+        else if (e >= numPoolEdges + numBoatEdges){
+          drawLine(u1, v1, u2, v2, "#EEEEFF");
+        }
+      }
+      if (mode2 == 1) {
+        if (e < numPoolEdges){
+          makePixelatedLine(u1, v1, u2, v2, "#306230");
+        }
+        else if (e >= numPoolEdges && e < numPoolEdges + numBoatEdges){
+          makePixelatedLine(u1, v1, u2, v2, "#9BBC0F");
+        }
+        else if (e >= numPoolEdges + numBoatEdges){
+          makePixelatedLine(u1, v1, u2, v2, "#8BAC0F");
+        }
+      }
+    }
+    if (mode2 == 1) {
+      drawPixelGrid();
+    }
+
+    if (mode3 == 1) {
+      //Colors faces of pool
+      for(let i = 0; i < numPoolFaces; i++){
+        drawFace(faces[i],projectedVertices,"#45718B");
+      }
+      //Colors faces of boat
+      for(let i = numPoolFaces; i < numPoolFaces + 8; i++){
+        drawFace(faces[i],projectedVertices,"#5A4938");
+      }
+
+      //Colors faces of sun
+      for(let i = numPoolFaces + 8; i < numPoolFaces + 8 + 4; i++){
+        drawFace(faces[i],projectedVertices,"#BFBFCF");
+      }
+    }
+  }
+
+  function makePixelatedLine(u1, v1, u2, v2, color){
+
+    u1 = Math.round(u1 / pixelSize);
+    v1 = Math.round(v1 / pixelSize);
+
+    u2 = Math.round(u2 / pixelSize);
+    v2 = Math.round(v2 / pixelSize);
+
+    if (u1 == u2){
+      let inc = v1 < v2 ? 1 : -1;
+      for (let v = v1; v != v2 + inc; v += inc) {
+        setPixelColor(u1, Math.round(v), color);
+      }
+    }
+
+    //The rate of change of v with respect to u
+    let dv_du =  (v2 - v1) / (u2 - u1);
+
+    let inc = u1 < u2 ? 1 : -1;
+
+    let u = u1;
+    let v = v1;
+
+    for (let u = u1; u != u2 + inc; u += inc) {
+      setPixelColor(u, Math.round(v), color);
+      v += dv_du * inc;
+    }
+  }
+
+  function drawPixelGrid(){
+    for(v = 0; v < rows; v++){
+      for(u = 0; u < cols; u++){
+
+        ctx.fillStyle = pixelGrid[u][v];
+        ctx.fillRect(u * pixelSize, v * pixelSize, pixelSize, pixelSize);
+      }
+    }
+  }
+
+  function drawFace(face, projectedVertices, color){
+    ctx.fillStyle = color;
+    ctx.beginPath();
+
+    ctx.moveTo(projectedVertices[face[0]].u, canvas.height - projectedVertices[face[0]].v);
+
+    ctx.lineTo(projectedVertices[face[1]].u, canvas.height - projectedVertices[face[1]].v);
+
+    ctx.lineTo(projectedVertices[face[2]].u, canvas.height - projectedVertices[face[2]].v);
+
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  //This uses a built in 'drawLine' function, provided by the javascript canvas
+  //I edited the function by allowing a color parameter to pass
+  function drawLine(x1, y1, x2, y2, color){
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = color;
+
+    //this is how you draw a line on the canvas 
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+
+
+  //this is how we detect events- 
+
+  // do nothing for now....
+    document.addEventListener("keydown", (event) => {
+      event.preventDefault();
+
+        //So the animation doesn't run too fast
+        let time = Date.now();
+
+       switch (event.key) {
+        case "ArrowUp":
+          //****TO DO: Change camera z position a go closer
+          //Making z attribute higher
+          camera.z += 0.2;
+          //console.log("Up arrow pressed");
+          draw();
+          break;
+        case "ArrowDown":
+          //****TO DO: Change camera z position go further away
+          //Making z attribute lower
+          camera.z -= 0.2;
+          //console.log("Down arrow pressed");
+          draw();
+          break;
+        case "ArrowLeft":
+          if (time - prevTime < 250) {
+            return;
+          }
+          prevTime = time;
+          //****TO DO: Change camera x position move left
+          //Making x attribute lower
+          if (camera.x > 18 && camera.x < 22){
+            camera.x -= 0.05;
+          }
+          else{
+            camera.x = 20;
+          }
+          //console.log("Left arrow pressed");
+          draw();
+          break;
+        case "ArrowRight":
+          if (time - prevTime < 250) {
+            return;
+          }
+          prevTime = time;
+          //****TO DO: Change camera x position move right
+          //Making x attribute higher
+          if (camera.x > 18 && camera.x < 22){
+            camera.x += 0.05;
+          }
+          else{
+            camera.x = 20;
+          }
+          //console.log("Right arrow pressed");
+          draw();
+          break;
+        case "1":
+          //****TO DO: reset camera
+          //Setting x y and z attributes to their initial positions
+          camera.x = 20;
+          camera.y = 1.5;
+          camera.z = -0.5;
+          mode2 = 0;
+          mode3 = 0;
+          //console.log("Reset");
+          draw();
+          break;
+        case "4": //Secret dev y-axis movement
+          camera.y -= 0.2;
+          draw();
+          break;
+        case "5":
+          camera.y += 0.2;
+          draw();
+          break;
+        default:
+          return;
+        case "2": //Activates Level 2
+          if (mode2 == 0){
+            mode2 = 1;
+            if (mode3 == 1) mode3 = 0;
+          }
+          else if (mode2 == 1){
+            mode2 = 0;
+          }
+          draw();
+          break;
+        case "3": //Activates Level 3
+          if (mode3 == 0){
+            mode3 = 1;
+            if (mode2 == 1) mode2 = 0;
+          }
+          else if (mode3 == 1){
+            mode3 = 0;
+          }
+          draw();
+          break;
+      }
+    });
+
+  function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    draw();
+  }
+
+
+  window.addEventListener("resize", resizeCanvas);
+  resizeCanvas();
+
+</script>
+</body>
+</html>
