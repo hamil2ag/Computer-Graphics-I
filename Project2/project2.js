@@ -231,7 +231,7 @@ image.onload = function () {
   requestAnimationFrame(render);
 };
 
-image.src = './image.png';
+image.src = 'Project2/image.png';
 
 //Takes the data from the image in a way that can be used by create_cubes()
 //rgb corresponds to the color data, and alpha corresponds to height
