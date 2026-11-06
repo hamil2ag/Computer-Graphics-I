@@ -318,18 +318,28 @@ function create_cubes() {
   cubes.length = 0;
 
   //Creates the cubes for the campus
-  if (level == 2 || level == 3 || level == 4){
+  if (level == 2 || level == 3 || level == 4 || level == 5){
     for (let row = 0; row < GRID_SIZE; row++) {
       for (let col = 0; col < GRID_SIZE; col++) {
 
         const rgba = image_loader(col*imageWidth/GRID_SIZE, row*imageHeight/GRID_SIZE);
 
-        cubes.push({
-          x: (col - (GRID_SIZE - 1) / 2) * SPACING,
-          z: (row - (GRID_SIZE - 1) / 2) * SPACING,
-          height: rgba[3]*height_coefficient,
-          color: [rgba[0]/255, rgba[1]/255, rgba[2]/255],
-        });
+        if (level == 2 || level == 3 || level == 4){
+          cubes.push({
+            x: (col - (GRID_SIZE - 1) / 2) * SPACING,
+            z: (row - (GRID_SIZE - 1) / 2) * SPACING,
+            height: rgba[3]*height_coefficient,
+            color: [rgba[0]/255, rgba[1]/255, rgba[2]/255],
+          });
+        }
+        if (level == 5){
+          cubes.push({
+            x: (col - (GRID_SIZE - 1) / 2) * SPACING,
+            z: (row - (GRID_SIZE - 1) / 2) * SPACING,
+            height: ((rgba[3]*(height_coefficient+99)*99999)**0.2),
+            color: [rgba[0]/255, rgba[1]/255, rgba[2]/255],
+          });
+        }
       }
     }
   }
@@ -522,14 +532,27 @@ function render(timeInMilliseconds) {
   gl.uniformMatrix4fv(uView, false, viewMatrix);
   gl.uniformMatrix4fv(uProjection, false, projectionMatrix);
 
-  for (const cube of cubes) {
-    const model = multiply(
-      translation(cube.x, 0, cube.z),
-      scaling(1, cube.height, 1)
-    );
-    gl.uniformMatrix4fv(uModel, false, model);
-    gl.uniform3fv(uColor, cube.color);
-    gl.drawArrays(gl.TRIANGLES, 0, VERTEX_COUNT);
+  if (level == 1 || level == 2 || level == 3 || level == 4){
+    for (const cube of cubes) {
+      const model = multiply(
+        translation(cube.x, 0, cube.z),
+        scaling(1, cube.height, 1)
+      );
+      gl.uniformMatrix4fv(uModel, false, model);
+      gl.uniform3fv(uColor, cube.color);
+      gl.drawArrays(gl.TRIANGLES, 0, VERTEX_COUNT);
+    }
+  }
+  else if (level == 5){
+    for (const cube of cubes) {
+      const model = multiply(
+        translation(cube.x, -53, cube.z),
+        scaling(1, cube.height, 1)
+      );
+      gl.uniformMatrix4fv(uModel, false, model);
+      gl.uniform3fv(uColor, cube.color);
+      gl.drawArrays(gl.TRIANGLES, 0, VERTEX_COUNT);
+    }
   }
 
   if (level == 3 || level == 4){
@@ -660,6 +683,13 @@ document.addEventListener("keydown", (event) => {
   switch (event.key) {
     case ("4"):
         level = 4;
+        create_cubes();
+        create_clouds();
+  }
+  //Extra hilly mode
+  switch (event.key) {
+    case ("5"):
+        level = 5;
         create_cubes();
         create_clouds();
   }
